@@ -60,6 +60,47 @@ class WebService {
   }
 
   internal func executeRequest<ResponseType: Decodable>(_ requestPath:String, completion: @escaping (_ response: ResponseType?, _ error: NSError?) -> Void) {
+    print("Executing Request With Path: \(requestPath)")
+    if let request = requestWithURLString(requestPath) {
+      let task = session.dataTask(with: request) {
+        data, response, error in
+        if error != nil {
+          completion(nil, error as NSError?)
+          return
+        }
+        
+        let cleanResponse = self.checkResponseForErrors(response)
+        
+        if let errorCode = cleanResponse.errorCode {
+          print("An error occured: \(errorCode)")
+          completion(nil, error as NSError?)
+          return
+        }
+        
+        guard let data = data else {
+          print("No response data")
+          completion(nil, error as NSError?)
+          return
+        }
+        
+        let decoder = JSONDecoder()
+        let response: ResponseType
+        
+        do {
+          response = try decoder.decode(ResponseType.self, from: data)
+        } catch (let error) {
+          print("Parsing issues")
+          completion(nil, error as NSError?)
+          return
+        }
+        
+        completion(response, nil)
+      }
+      task.resume()
+    } else {
+      let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorBadURL, userInfo: [NSLocalizedDescriptionKey : "There was a problem creating the request URL:\n" + "\(requestPath)"])
+      completion(nil, error)
+    }
     // TODO: Implement
   }
 

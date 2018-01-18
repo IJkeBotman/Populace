@@ -35,6 +35,7 @@ class PopulationViewController: UIViewController, UITableViewDataSource, UITable
   // MARK: ****** Models ******
   var configuration: PopulationConfiguration?
   let populationService = WorldPopulationService()
+  let chartService = GoogleChartService()
   
   var facts: [PopulationFactObject]?
   var graphImage: UIImage?
@@ -111,6 +112,17 @@ class PopulationViewController: UIViewController, UITableViewDataSource, UITable
     
     populationService.getPopulationTable(configuration.dobYear, country: configuration.country) { table, error in
       print("Table: \(String(describing: table))\nError: \(String(describing: error?.localizedDescription))")
+      guard let table = table else { return }
+      
+      DispatchQueue.main.async {
+        let width = self.table.frame.size.width
+        self.chartService.getStackedBarChart(CGSize(width: width, height: width), bottomSeries: table.malePopulationByDecade, bottomColor: maleColor, topSeries: table.femalePopulationByDecade, topColor: femaleColor, completion: { (image, error) in
+          DispatchQueue.main.async {
+            self.graphImage = image
+            self.table.reloadSections(IndexSet(integer: self.kGraphSection), with: .automatic)
+          }
+        })
+      }
     }
   }
 

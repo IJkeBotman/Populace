@@ -34,28 +34,67 @@ import UIKit
 class GoogleChartService : WebService {
   // http://chart.googleapis.com/chart?chs=250x150&cht=bvs&chco=4D89F9,C6D9FD&chd=t:10,50,60,80,40|50,60,100,40,20&chds=0,160&chbh=a
   fileprivate let baseURL = URL(string: "http://chart.googleapis.com")!
-
+  
   init () {
     super.init(rootURL: baseURL)
   }
   
   
   /**
-  Gets a Google Stacked Bar Graph Chart Image from two arrays of Integers
-  - parameter size: The size of the image to get
-  - parameter bottomSeries: An array of integer values for the bottom stack (Required)
-  - parameter bottomColor: The color for the bottom data series
-  - parameter topSeries: An array of integer values for the top stack (Optional)
-  - parameter topColor: The color for the top data series (Optional)
-  - parameter completion: A completion block that returns the image or an error
-  */
+   Gets a Google Stacked Bar Graph Chart Image from two arrays of Integers
+   - parameter size: The size of the image to get
+   - parameter bottomSeries: An array of integer values for the bottom stack (Required)
+   - parameter bottomColor: The color for the bottom data series
+   - parameter topSeries: An array of integer values for the top stack (Optional)
+   - parameter topColor: The color for the top data series (Optional)
+   - parameter completion: A completion block that returns the image or an error
+   */
   func getStackedBarChart(_ size: CGSize,
-    bottomSeries: [Int], bottomColor: UIColor,
-    topSeries: [Int]?, topColor: UIColor?,
-    completion: @escaping (_ image:UIImage?, _ error:Error?) -> Void ) {
+                          bottomSeries: [Int], bottomColor: UIColor,
+                          topSeries: [Int]?, topColor: UIColor?,
+                          completion: @escaping (_ image:UIImage?, _ error:Error?) -> Void ) {
+    var path = "/chart?cht=bvs&chbh=a"
+    path += "&\(seriesMaxValueString(bottomSeries, series2: topSeries))"
+    path += "&\(sizeParameterString(size))"
+    path += "&\(seriesColorParameterString(bottomColor, color2: topColor))"
+    path += "&\(seriesParameterString(bottomSeries, series2: topSeries))"
+    
+    let encodedPath = path.addingPercentEncoding(withAllowedCharacters: CharacterSet.urlQueryAllowed)
+    
+    if let request = requestWithURLString(encodedPath!) {
+      let downloadTask = session.downloadTask(with: request) {
+        url, response, error in
+        if error != nil {
+          completion(nil, error)
+          return
+        }
+        let cleanResponse = self.checkResponseForErrors(response)
+        if let errorCode = cleanResponse.errorCode {
+          print("An error occured: \(errorCode)")
+          completion(nil, error)
+          return
+        }
+        
+        guard let url = url else {
+          print("No Results URL")
+          completion(nil, error)
+          return
+        }
+        
+        guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else {
+          print("No Image")
+          completion(nil, error)
+          return
+        }
+        
+        completion(image, error)
+      }
+      downloadTask.resume()
+    }
+    
     // TODO - Implement Functionality
   }
-
+  
   /// This method creates the GCharts size (chs) query string parameter
   internal func sizeParameterString(_ size: CGSize) -> String {
     return "chs=\(Int(size.width))x\(Int(size.height))"

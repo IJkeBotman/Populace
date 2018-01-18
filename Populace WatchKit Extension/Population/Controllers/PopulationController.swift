@@ -31,20 +31,22 @@
 import WatchKit
 
 class PopulationController: WKInterfaceController {
-
+  
   // MARK: ****** UI Elements ******
   @IBOutlet weak var table: WKInterfaceTable!
   @IBOutlet weak var loadingGroup: WKInterfaceGroup!
   @IBOutlet weak var noConfigurationGroup: WKInterfaceGroup!
-
+  
   // Track whether to update because menu closing will fire didAppear needlessly
   var updateOnAppear = false
-
+  
   // MARK: ****** Models ******
   var configuration: PopulationConfiguration?
+  let populationService = WorldPopulationService()
+  let chartService = GoogleChartService()
   
   var facts: [PopulationFactObject]?
-
+  
   // Manages the state of the interface
   enum InterfaceState: Int {
     case noConfiguration
@@ -70,7 +72,7 @@ class PopulationController: WKInterfaceController {
       }
     }
   }
-
+  
   
   // MARK: - ****** Lifecycle ******
   
@@ -102,9 +104,9 @@ class PopulationController: WKInterfaceController {
     context.configuration = configuration
     self.presentController(withName: "ConfigurationController", context: context)
   }
-
+  
   @IBAction func refresh(_ sender: AnyObject?) {
-
+    
     facts = []
     
     // Clean up any old results
@@ -113,12 +115,76 @@ class PopulationController: WKInterfaceController {
       table.removeRows(at: IndexSet(integersIn: Range(NSMakeRange(0, numberRows))!))
     }
     
+    guard let configuration = configuration else {
+      changeConfiguration(sender)
+      return
+    }
+    
     // Show the Loading View
     self.interfaceStatus = .loading
-
+    
+    populationService.getRankInCountry(configuration) { (rank, error) in
+      print("""
+        Rank: \(String(describing: rank))
+        Error: \(String(describing: error?.localizedDescription))
+        """)
+      
+      DispatchQueue.main.async {
+        self.interfaceStatus = .results
+      }
+      
+      guard let rank = rank else { return }
+      
+      DispatchQueue.main.async {
+        self.addFactToTable(rank)
+      }
+      
+    }
+    
+    populationService.getLifeExpectancy(configuration) { (expectancy, error) in
+      print("""
+        Expectancy: \(String(describing: expectancy))
+        Error: \(String(describing: error?.localizedDescription))
+        """)
+      DispatchQueue.main.async {
+        self.interfaceStatus = .results
+      }
+      guard let expectancy = expectancy else { return }
+      
+      DispatchQueue.main.async {
+        self.addFactToTable(expectancy)
+      }
+    }
+    
+    populationService.getPopulationTable(configuration.dobYear, country: configuration.country) { (table, error) in
+      print("""
+        Table: \(String(describing: table))
+        Error: \(String(describing: error?.localizedDescription))
+        """)
+      
+      guard let table = table else {
+        DispatchQueue.main.async {
+          self.interfaceStatus = .results
+        }
+        return
+      }
+      
+      self.chartService.getStackedBarChart(CGSize(width: 300, height: 300), bottomSeries: table.malePopulationByDecade, bottomColor: maleColor, topSeries: table.femalePopulationByDecade, topColor: femaleColor, completion: { (image, error) in
+        DispatchQueue.main.async {
+          self.interfaceStatus = .results
+          self.table.insertRows(at: IndexSet(integer: self.facts!.count), withRowType: "ChartRowController")
+          let row = self.table.rowController(at: self.facts!.count) as! ChartRowController
+          row.image = image
+        }
+      })
+      
+    }
+    
+    
+    
     // TODO - Implement Functionality
   }
-
+  
   func addFactToTable (_ fact: PopulationFactObject) {
     if facts == nil {
       facts = []
@@ -133,12 +199,12 @@ class PopulationController: WKInterfaceController {
 
 
 extension PopulationController : ConfigurationControllerDelegate {
-
+  
   func configurationController(_ controller: ConfigurationController,
-    didUpdateConfiguration configuration: PopulationConfiguration) {
-      self.configuration = configuration
-      updateOnAppear = true
-      dismiss()
+                               didUpdateConfiguration configuration: PopulationConfiguration) {
+    self.configuration = configuration
+    updateOnAppear = true
+    dismiss()
   }
   
   func configurationController(_ controllerDidCancel: ConfigurationController) {
